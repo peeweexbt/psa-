@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PSA Pokemon Stock Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --red: #E63946;
+    --yellow: #FFD60A;
+    --blue: #4CC9F0;
+    --green: #57CC99;
+    --orange: #FF6B35;
+    --dark: #0A0A0F;
+    --dark2: #12121A;
+    --dark3: #1A1A26;
+    --dark4: #222233;
+    --border: rgba(255,255,255,0.07);
+    --text: #F0F0F0;
+    --muted: #888899;
+    --pixel: 'Press Start 2P', monospace;
+    --mono: 'DM Mono', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--dark);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Animated grid background */
+  .bg-grid {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,214,10,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,214,10,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: gridShift 20s linear infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+  @keyframes gridShift {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(40px); }
+  }
+
+  /* Glow orbs */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.15;
+  }
+  .orb-1 { width: 500px; height: 500px; background: var(--red); top: -200px; left: -100px; animation: float1 12s ease-in-out infinite; }
+  .orb-2 { width: 400px; height: 400px; background: var(--blue); bottom: -100px; right: -100px; animation: float2 15s ease-in-out infinite; }
+  @keyframes float1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(60px,40px)} }
+  @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-40px,-60px)} }
+
+  /* NAV */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(10,10,15,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .logo-ball {
+    width: 28px;
+    height: 28px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .logo-text {
+    font-family: var(--pixel);
+    font-size: 10px;
+    color: var(--yellow);
+    letter-spacing: 1px;
+  }
+  .logo-text span { color: var(--red); }
+  .nav-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+
+  /* HERO */
+  .hero {
+    position: relative;
+    z-index: 1;
+    padding: 5rem 2rem 3rem;
+    text-align: center;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .hero-eyebrow {
+    font-family: var(--pixel);
+    font-size: 8px;
+    color: var(--yellow);
+    letter-spacing: 3px;
+    margin-bottom: 1.5rem;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.1s;
+  }
+  .hero-title {
+    font-family: var(--pixel);
+    font-size: clamp(18px, 4vw, 32px);
+    line-height: 1.6;
+    margin-bottom: 1.25rem;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.2s;
+  }
+  .hero-title .line2 { color: var(--red); }
+  .hero-sub {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.8;
+    max-width: 520px;
+    margin: 0 auto 2.5rem;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.35s;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* SEARCH BOX */
+  .search-container {
+    position: relative;
+    z-index: 1;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 2rem 2rem;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.45s;
+  }
+  .search-box {
+    background: var(--dark2);
+    border: 1px solid rgba(255,214,10,0.2);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 0 40px rgba(255,214,10,0.05), inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .search-input-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .search-input {
+    flex: 1;
+    background: var(--dark3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .search-input::placeholder { color: var(--muted); }
+  .search-input:focus {
+    border-color: rgba(255,214,10,0.4);
+    box-shadow: 0 0 0 3px rgba(255,214,10,0.08);
+  }
+  .search-btn {
+    background: var(--yellow);
+    color: var(--dark);
+    border: none;
+    border-radius: 10px;
+    padding: 14px 24px;
+    font-family: var(--pixel);
+    font-size: 9px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: transform 0.15s, box-shadow 0.15s;
+    white-space: nowrap;
+    box-shadow: 0 4px 20px rgba(255,214,10,0.3);
+  }
+  .search-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(255,214,10,0.4); }
+  .search-btn:active { transform: scale(0.97); }
+  .search-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* REGION FILTERS */
+  .region-filters {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .region-chip {
+    background: var(--dark3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .region-chip:hover { border-color: rgba(255,255,255,0.15); color: var(--text); }
+  .region-chip.active {
+    background: rgba(255,214,10,0.1);
+    border-color: rgba(255,214,10,0.4);
+    color: var(--yellow);
+  }
+
+  /* QUICK SEARCHES */
+  .quick-searches {
+    position: relative;
+    z-index: 1;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 2rem 3rem;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.55s;
+  }
+  .quick-label {
+    font-family: var(--pixel);
+    font-size: 7px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+  .quick-tags {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .quick-tag {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .quick-tag:hover {
+    border-color: var(--blue);
+    color: var(--blue);
+    background: rgba(76,201,240,0.05);
+  }
+
+  /* DIVIDER */
+  .divider {
+    position: relative;
+    z-index: 1;
+    max-width: 760px;
+    margin: 0 auto 2rem;
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .divider-line { flex: 1; height: 1px; background: var(--border); }
+  .divider-text { font-family: var(--pixel); font-size: 7px; color: var(--muted); letter-spacing: 2px; white-space: nowrap; }
+
+  /* RESULTS AREA */
+  #results-area {
+    position: relative;
+    z-index: 1;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 2rem 4rem;
+  }
+
+  /* THINKING / LOADING */
+  .thinking-block {
+    background: var(--dark2);
+    border: 1px solid rgba(76,201,240,0.2);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .thinking-title {
+    font-family: var(--pixel);
+    font-size: 8px;
+    color: var(--blue);
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .thinking-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 0;
+    border-top: 1px solid var(--border);
+  }
+  .thinking-step:first-of-type { border-top: none; }
+  .step-bullet {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--dark4);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .step-bullet.done { background: rgba(87,204,153,0.2); border-color: var(--green); color: var(--green); }
+  .step-bullet.active { background: rgba(76,201,240,0.2); border-color: var(--blue); }
+  .step-spinner {
+    width: 8px;
+    height: 8px;
+    border: 1.5px solid rgba(76,201,240,0.3);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* STAT STRIP */
+  .stat-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    background: var(--dark2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .stat-num {
+    font-family: var(--pixel);
+    font-size: 18px;
+    margin-bottom: 6px;
+  }
+  .stat-label { font-size: 11px; color: var(--muted); }
+  .stat-green .stat-num { color: var(--green); }
+  .stat-amber .stat-num { color: var(--orange); }
+  .stat-red .stat-num { color: var(--red); }
+  .stat-blue .stat-num { color: var(--blue); }
+
+  /* RESULT CARDS */
+  .result-list { display: flex; flex-direction: column; gap: 10px; }
+  .result-card {
+    background: var(--dark2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    transition: border-color 0.2s, transform 0.2s;
+    animation: cardIn 0.3s ease forwards;
+    opacity: 0;
+  }
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .result-card:hover {
+    border-color: rgba(255,255,255,0.12);
+    transform: translateY(-2px);
+  }
+  .result-card.status-in { border-left: 3px solid var(--green); }
+  .result-card.status-low { border-left: 3px solid var(--orange); }
+  .result-card.status-out { border-left: 3px solid var(--red); }
+  .result-card.status-unknown { border-left: 3px solid var(--muted); }
+
+  .card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .card-store {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 3px;
+  }
+  .card-region {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .card-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .card-price {
+    font-family: var(--pixel);
+    font-size: 11px;
+    color: var(--yellow);
+  }
+  .badge {
+    font-family: var(--pixel);
+    font-size: 7px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+  .badge-green { background: rgba(87,204,153,0.15); color: var(--green); border: 1px solid rgba(87,204,153,0.3); }
+  .badge-orange { background: rgba(255,107,53,0.15); color: var(--orange); border: 1px solid rgba(255,107,53,0.3); }
+  .badge-red { background: rgba(230,57,70,0.15); color: var(--red); border: 1px solid rgba(230,57,70,0.3); }
+  .badge-gray { background: rgba(136,136,153,0.1); color: var(--muted); border: 1px solid var(--border); }
+
+  .card-notes {
+    font-size: 13px;
+    color: #aaa;
+    line-height: 1.65;
+    margin-bottom: 10px;
+  }
+  .card-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--blue);
+    text-decoration: none;
+    opacity: 0.8;
+    transition: opacity 0.15s;
+  }
+  .card-link:hover { opacity: 1; }
+
+  /* EMPTY STATE */
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+  }
+  .pokeball-svg {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 1.5rem;
+    animation: spin 4s linear infinite;
+    opacity: 0.3;
+  }
+  .empty-title {
+    font-family: var(--pixel);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .empty-sub { font-size: 13px; color: var(--muted); opacity: 0.6; }
+
+  /* FOOTER */
+  footer {
+    position: relative;
+    z-index: 1;
+    border-top: 1px solid var(--border);
+    padding: 2rem;
+    text-align: center;
+  }
+  .footer-logo {
+    font-family: var(--pixel);
+    font-size: 9px;
+    color: var(--yellow);
+    margin-bottom: 8px;
+  }
+  .footer-logo span { color: var(--red); }
+  .footer-text { font-size: 11px; color: var(--muted); opacity: 0.6; }
+
+  /* RESPONSIVE */
+  @media (max-width: 600px) {
+    .hero { padding: 3rem 1.5rem 2rem; }
+    .search-container, .quick-searches, #results-area, .divider { padding-left: 1rem; padding-right: 1rem; }
+    .search-input-row { flex-direction: column; }
+    .stat-strip { grid-template-columns: repeat(2, 1fr); }
+    .hero-title { font-size: 16px; }
+    nav { padding: 0 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <svg class="logo-ball" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="14" cy="14" r="13" stroke="#E63946" stroke-width="1.5"/>
+      <path d="M1 14h26" stroke="#666" stroke-width="1.5"/>
+      <path d="M1 14C1 7 7 1 14 1s13 6 13 13" fill="#E63946" fill-opacity="0.2"/>
+      <circle cx="14" cy="14" r="4" fill="#0A0A0F" stroke="#666" stroke-width="1.5"/>
+      <circle cx="14" cy="14" r="2" fill="#E63946"/>
+    </svg>
+    <span class="logo-text">PSA Pokemon Stock Agent</span>
+  </div>
+  <div class="nav-status">
+    <div class="status-dot"></div>
+    Live Search Active
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <p class="hero-eyebrow">// Global Retail Intelligence</p>
+  <h1 class="hero-title">
+    PSA<br>
+    <span class="line2"><span style="color:var(--red)">Pokemon</span> Stock Agent</span>
+  </h1>
+  <p class="hero-sub">
+    Real-time stock checks across Target, Walmart, TCGPlayer, Amazon,
+    Pokémon Center, Smyths, Yodobashi, and hundreds of retailers worldwide.
+  </p>
+</section>
+
+<!-- SEARCH -->
+<div class="search-container">
+  <div class="search-box">
+    <div class="search-input-row">
+      <input
+        type="text"
+        id="searchInput"
+        class="search-input"
+        placeholder="Prismatic Evolutions ETB, Charizard ex, Scarlet & Violet booster box…"
+        autocomplete="off"
+      >
+      <button class="search-btn" id="searchBtn" onclick="runSearch()">SEARCH</button>
+    </div>
+    <div class="region-filters" id="regionFilters">
+      <div class="region-chip active" data-region="all">🌍 All Regions</div>
+      <div class="region-chip" data-region="us">🇺🇸 USA</div>
+      <div class="region-chip" data-region="uk">🇬🇧 UK</div>
+      <div class="region-chip" data-region="eu">🇪🇺 Europe</div>
+      <div class="region-chip" data-region="jp">🇯🇵 Japan</div>
+      <div class="region-chip" data-region="au">🇦🇺 Australia</div>
+      <div class="region-chip" data-region="ca">🇨🇦 Canada</div>
+    </div>
+  </div>
+</div>
+
+<!-- QUICK SEARCHES -->
+<div class="quick-searches">
+  <p class="quick-label">// POPULAR SEARCHES</p>
+  <div class="quick-tags">
+    <span class="quick-tag" onclick="setAndSearch('Prismatic Evolutions booster box')">Prismatic Evolutions booster box</span>
+    <span class="quick-tag" onclick="setAndSearch('Surging Sparks ETB')">Surging Sparks ETB</span>
+    <span class="quick-tag" onclick="setAndSearch('Scarlet Violet 151 booster pack')">SV 151 booster pack</span>
+    <span class="quick-tag" onclick="setAndSearch('Charizard ex SAR')">Charizard ex SAR</span>
+    <span class="quick-tag" onclick="setAndSearch('Crown Zenith tin')">Crown Zenith tin</span>
+    <span class="quick-tag" onclick="setAndSearch('Pokemon Center exclusive')">Pokemon Center exclusive</span>
+  </div>
+</div>
+
+<div class="divider">
+  <div class="divider-line"></div>
+  <div class="divider-text">// RESULTS</div>
+  <div class="divider-line"></div>
+</div>
+
+<!-- RESULTS -->
+<div id="results-area">
+  <div class="empty-state">
+    <svg class="pokeball-svg" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="40" cy="40" r="38" stroke="#E63946" stroke-width="3"/>
+      <path d="M2 40h76" stroke="#888" stroke-width="3"/>
+      <path d="M2 40C2 19.5 19.5 2 40 2s38 17.5 38 38" fill="#E63946" fill-opacity="0.15"/>
+      <circle cx="40" cy="40" r="12" fill="#0A0A0F" stroke="#888" stroke-width="3"/>
+      <circle cx="40" cy="40" r="6" fill="#E63946"/>
+    </svg>
+    <p class="empty-title">WAITING FOR SEARCH</p>
+    <p class="empty-sub">Enter a card name or product above to check global stock</p>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <p class="footer-logo">PSA Pokemon Stock Agent</p>
+  <p class="footer-text">Powered by live web search · Stock data may change rapidly · Not affiliated with Nintendo or The Pokémon Company</p>
+</footer>
+
+<script>
+  let activeRegion = 'all';
+
+  // Region filter clicks
+  document.getElementById('regionFilters').addEventListener('click', e => {
+    const chip = e.target.closest('.region-chip');
+    if (!chip) return;
+    document.querySelectorAll('.region-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    activeRegion = chip.dataset.region;
+  });
+
+  // Enter key
+  document.getElementById('searchInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') runSearch();
+  });
+
+  function setAndSearch(term) {
+    document.getElementById('searchInput').value = term;
+    runSearch();
+  }
+
+  function getRegionPhrase(r) {
+    const map = {
+      all: 'worldwide including USA, UK, Europe, Japan, Australia, and Canada',
+      us: 'USA retailers like Target, Walmart, Best Buy, GameStop, TCGPlayer, Amazon US',
+      uk: 'UK retailers like Smyths, Argos, GAME, Amazon UK',
+      eu: 'European retailers in Germany, France, Netherlands, Spain',
+      jp: 'Japanese retailers like Yodobashi, Bic Camera, Amazon Japan, Pokemon Center Japan',
+      au: 'Australian retailers like EB Games, Big W, Kmart, JB Hi-Fi',
+      ca: 'Canadian retailers like Walmart Canada, Best Buy Canada'
+    };
+    return map[r] || map.all;
+  }
+
+  function badgeHTML(status) {
+    if (status === 'in_stock') return '<span class="badge badge-green">IN STOCK</span>';
+    if (status === 'low_stock') return '<span class="badge badge-orange">LOW STOCK</span>';
+    if (status === 'out_of_stock') return '<span class="badge badge-red">OUT OF STOCK</span>';
+    return '<span class="badge badge-gray">UNKNOWN</span>';
+  }
+
+  function cardClass(status) {
+    if (status === 'in_stock') return 'status-in';
+    if (status === 'low_stock') return 'status-low';
+    if (status === 'out_of_stock') return 'status-out';
+    return 'status-unknown';
+  }
+
+  function renderResults(results, query) {
+    const area = document.getElementById('results-area');
+
+    if (!results || results.length === 0) {
+      area.innerHTML = `
+        <div class="empty-state">
+          <p class="empty-title">NO RESULTS FOUND</p>
+          <p class="empty-sub">Try a different product name or region</p>
+        </div>`;
+      return;
+    }
+
+    const inStock = results.filter(r => r.status === 'in_stock').length;
+    const low = results.filter(r => r.status === 'low_stock').length;
+    const outOf = results.filter(r => r.status === 'out_of_stock').length;
+    const unk = results.filter(r => !['in_stock','low_stock','out_of_stock'].includes(r.status)).length;
+
+    let html = `
+      <div class="stat-strip">
+        <div class="stat-card stat-blue">
+          <div class="stat-num">${results.length}</div>
+          <div class="stat-label">Stores Checked</div>
+        </div>
+        <div class="stat-card stat-green">
+          <div class="stat-num">${inStock}</div>
+          <div class="stat-label">In Stock</div>
+        </div>
+        <div class="stat-card stat-amber">
+          <div class="stat-num">${low}</div>
+          <div class="stat-label">Low Stock</div>
+        </div>
+        <div class="stat-card stat-red">
+          <div class="stat-num">${outOf}</div>
+          <div class="stat-label">Out of Stock</div>
+        </div>
+      </div>
+      <p style="font-family:var(--pixel); font-size:7px; color:var(--muted); letter-spacing:2px; margin-bottom:14px;">
+        // ${results.length} RESULTS FOR "${query.toUpperCase()}"
+      </p>
+      <div class="result-list">
+    `;
+
+    results.forEach((r, i) => {
+      html += `
+        <div class="result-card ${cardClass(r.status)}" style="animation-delay: ${i * 0.05}s">
+          <div class="card-top">
+            <div>
+              <div class="card-store">${escHtml(r.store || 'Unknown')}</div>
+              <div class="card-region">📍 ${escHtml(r.region || '—')}</div>
+            </div>
+            <div class="card-right">
+              ${r.price ? `<span class="card-price">${escHtml(r.price)}</span>` : ''}
+              ${badgeHTML(r.status)}
+            </div>
+          </div>
+          ${r.notes ? `<p class="card-notes">${escHtml(r.notes)}</p>` : ''}
+          ${r.url ? `<a class="card-link" href="${escHtml(r.url)}" target="_blank" rel="noopener">↗ View store</a>` : ''}
+        </div>
+      `;
+    });
+
+    html += `</div>
+      <p style="font-size:11px; color:var(--muted); opacity:0.5; margin-top:1.5rem; text-align:center;">
+        Data sourced via live web search · Availability changes rapidly
+      </p>`;
+
+    area.innerHTML = html;
+  }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+
+  async function runSearch() {
+    const query = document.getElementById('searchInput').value.trim();
+    if (!query) return;
+
+    const btn = document.getElementById('searchBtn');
+    btn.disabled = true;
+    btn.textContent = 'SEARCHING…';
+
+    const area = document.getElementById('results-area');
+    const region = getRegionPhrase(activeRegion);
+
+    area.innerHTML = `
+      <div class="thinking-block">
+        <div class="thinking-title">
+          <div class="step-spinner"></div>
+          AGENT SEARCHING…
+        </div>
+        <div class="thinking-step" id="ts1">
+          <div class="step-bullet active"><div class="step-spinner"></div></div>
+          <span>Sending search agent to check ${region}…</span>
+        </div>
+      </div>
+      <div style="text-align:center; font-size:12px; color:var(--muted); padding:1rem 0;">Scanning shelves across the globe…</div>
+    `;
+
+    const prompt = `You are a Pokémon card stock-checking agent. The user wants: "${query}"
+Search ${region} for current stock, availability, and pricing.
+
+Return a JSON array ONLY (no markdown, no preamble, no trailing text). Each item:
+- store: retailer name (string)
+- region: country/region (string, e.g. "USA", "UK", "Japan")
+- status: "in_stock" | "low_stock" | "out_of_stock" | "unknown"
+- price: price string with currency symbol (or null)
+- notes: 1-2 sentences about availability, stock limits, variants, or notable info
+- url: direct store URL if available (or null)
+
+Include 8-14 results from varied stores and regions. Focus on real, current data.`;
+
+    try {
+      const resp = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      const data = await resp.json();
+
+      // Mark step done
+      const ts1 = document.getElementById('ts1');
+      if (ts1) {
+        ts1.querySelector('.step-bullet').className = 'step-bullet done';
+        ts1.querySelector('.step-bullet').textContent = '✓';
+      }
+
+      // Extract text block
+      let jsonText = '';
+      for (const block of (data.content || [])) {
+        if (block.type === 'text' && block.text) { jsonText = block.text; break; }
+      }
+
+      const clean = jsonText.replace(/```json|```/g, '').trim();
+      let results;
+      try {
+        results = JSON.parse(clean);
+      } catch {
+        const m = clean.match(/\[[\s\S]*\]/);
+        results = m ? JSON.parse(m[0]) : [];
+      }
+
+      renderResults(results, query);
+
+    } catch (err) {
+      area.innerHTML = `
+        <div style="background:rgba(230,57,70,0.1); border:1px solid rgba(230,57,70,0.3); border-radius:12px; padding:20px; text-align:center;">
+          <p style="font-family:var(--pixel); font-size:8px; color:var(--red); margin-bottom:8px;">ERROR</p>
+          <p style="font-size:13px; color:var(--muted);">${err.message}</p>
+        </div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'SEARCH';
+    }
+  }
+</script>
+</body>
+</html>
