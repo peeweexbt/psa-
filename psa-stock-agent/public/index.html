@@ -805,12 +805,15 @@ Include 8-14 results from varied stores and regions. Focus on real, current data
         })
       });
 
-      const data = await resp.json();
+      let data;
+      try {
+        data = await resp.json();
+      } catch {
+        throw new Error(`Server returned HTTP ${resp.status} with non-JSON response`);
+      }
 
-      // Surface API-level errors clearly
-      if (!resp.ok || data.error) {
-        const msg = data.error?.message || data.error || `HTTP ${resp.status}`;
-        throw new Error(`API error: ${msg}`);
+      if (data.error) {
+        throw new Error(typeof data.error === 'string' ? data.error : (data.error.message || JSON.stringify(data.error)));
       }
 
       // Mark step done
@@ -820,19 +823,18 @@ Include 8-14 results from varied stores and regions. Focus on real, current data
         ts1.querySelector('.step-bullet').textContent = '✓';
       }
 
-      // Extract the last text block (after tool use completes)
+      // Find the last text block that looks like JSON (comes after tool use)
+      const blocks = data.content || [];
       let jsonText = '';
-      for (const block of (data.content || []).slice().reverse()) {
-        if (block.type === 'text' && block.text && block.text.trim().startsWith('[')) {
-          jsonText = block.text;
+      for (let i = blocks.length - 1; i >= 0; i--) {
+        if (blocks[i].type === 'text' && blocks[i].text) {
+          jsonText = blocks[i].text;
           break;
         }
       }
-      // Fallback: any text block
+
       if (!jsonText) {
-        for (const block of (data.content || [])) {
-          if (block.type === 'text' && block.text) { jsonText = block.text; break; }
-        }
+        throw new Error('No text in response. Raw: ' + JSON.stringify(blocks).slice(0, 300));
       }
 
       const clean = jsonText.replace(/```json|```/g, '').trim();
@@ -841,16 +843,35 @@ Include 8-14 results from varied stores and regions. Focus on real, current data
         results = JSON.parse(clean);
       } catch {
         const m = clean.match(/\[[\s\S]*\]/);
-        results = m ? JSON.parse(m[0]) : [];
+        if (m) {
+          try { results = JSON.parse(m[0]); } catch { results = []; }
+        } else {
+          results = [];
+        }
+      }
+
+      if (!Array.isArray(results) || results.length === 0) {
+        area.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--muted);">
+          <p style="font-family:var(--pixel);font-size:8px;margin-bottom:8px;">NO RESULTS</p>
+          <p style="font-size:12px;">The agent couldn't find stock data for this search. Try a different product name.</p>
+          <details style="margin-top:1rem;font-size:11px;text-align:left;background:var(--dark3);padding:12px;border-radius:8px;">
+            <summary style="cursor:pointer;color:var(--blue);">Raw response (for debugging)</summary>
+            <pre style="white-space:pre-wrap;word-break:break-all;margin-top:8px;">${escHtml(jsonText.slice(0, 1000))}</pre>
+          </details>
+        </div>`;
+        return;
       }
 
       renderResults(results, query);
 
     } catch (err) {
       area.innerHTML = `
-        <div style="background:rgba(230,57,70,0.1); border:1px solid rgba(230,57,70,0.3); border-radius:12px; padding:20px; text-align:center;">
-          <p style="font-family:var(--pixel); font-size:8px; color:var(--red); margin-bottom:8px;">ERROR</p>
-          <p style="font-size:13px; color:var(--muted);">${err.message}</p>
+        <div style="background:rgba(230,57,70,0.1);border:1px solid rgba(230,57,70,0.3);border-radius:12px;padding:20px;">
+          <p style="font-family:var(--pixel);font-size:8px;color:var(--red);margin-bottom:10px;">ERROR</p>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">${escHtml(err.message)}</p>
+          <p style="font-size:12px;color:var(--muted);">
+            Check <a href="/api/debug" target="_blank" style="color:var(--blue);">/api/debug</a> to verify your API key is set correctly on Vercel.
+          </p>
         </div>`;
     } finally {
       btn.disabled = false;

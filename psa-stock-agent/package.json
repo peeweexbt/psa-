@@ -1,8 +1,5 @@
 {
   "name": "psa-pokemon-stock-agent",
   "version": "1.0.0",
-  "description": "PSA Pokemon Stock Agent — real-time global card stock checker",
-  "engines": {
-    "node": ">=18"
-  }
+  "engines": { "node": ">=18" }
 }
