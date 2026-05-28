@@ -799,13 +799,19 @@ Include 8-14 results from varied stores and regions. Focus on real, current data
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          max_tokens: 4096,
+          tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
           messages: [{ role: 'user', content: prompt }]
         })
       });
 
       const data = await resp.json();
+
+      // Surface API-level errors clearly
+      if (!resp.ok || data.error) {
+        const msg = data.error?.message || data.error || `HTTP ${resp.status}`;
+        throw new Error(`API error: ${msg}`);
+      }
 
       // Mark step done
       const ts1 = document.getElementById('ts1');
@@ -814,10 +820,19 @@ Include 8-14 results from varied stores and regions. Focus on real, current data
         ts1.querySelector('.step-bullet').textContent = '✓';
       }
 
-      // Extract text block
+      // Extract the last text block (after tool use completes)
       let jsonText = '';
-      for (const block of (data.content || [])) {
-        if (block.type === 'text' && block.text) { jsonText = block.text; break; }
+      for (const block of (data.content || []).slice().reverse()) {
+        if (block.type === 'text' && block.text && block.text.trim().startsWith('[')) {
+          jsonText = block.text;
+          break;
+        }
+      }
+      // Fallback: any text block
+      if (!jsonText) {
+        for (const block of (data.content || [])) {
+          if (block.type === 'text' && block.text) { jsonText = block.text; break; }
+        }
       }
 
       const clean = jsonText.replace(/```json|```/g, '').trim();
